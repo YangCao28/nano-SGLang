@@ -2,11 +2,28 @@
 
 A lightweight SGLang implementation built from scratch.
 
-## Key Features
+## 🚀 BlockManager Highlights
 
-* 🚀 **Fast offline inference** - Comparable inference speeds to vLLM
-* 📖 **Readable codebase** - Clean implementation in ~ 1,200 lines of Python code
-* ⚡ **Optimization Suite** - Prefix caching, Tensor Parallelism, Torch compilation, CUDA graph, etc.
+- 🌲 **Trie-based Prefix Sharing**  
+  Efficiently reuses KV cache blocks for shared token prefixes across sequences.
+
+- ✂️ **Copy-on-Write with Triton Kernel**  
+  Cleanly handles divergence by copying only the shared prefix with optimized kernel.
+
+- 🧠 **Two-Level Memory (GPU + Pinned CPU)**  
+  Automatically swaps blocks between VRAM and pinned RAM to reduce GPU pressure.
+
+- ♻️ **LRU Eviction Strategy**  
+  Frees unused blocks intelligently based on least recently used (LRU) policy.
+
+- 🧱 **Modular Hardware Abstraction Layer**  
+  Clean separation of memory management, allocation, and data movement.
+
+- 📦 **Sequence-Friendly Design**  
+  Supports streaming with `allocate()`, `can_append()`, `may_append()`, and safe deallocation.
+
+- 🧾 **Debuggable & Transparent**  
+  Includes detailed logging and a `print_state()` function for internal visibility.
 
 ## Installation
 
