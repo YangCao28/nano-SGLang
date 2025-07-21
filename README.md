@@ -1,6 +1,6 @@
 # Nano-SGLang
 
-A lightweight vLLM implementation built from scratch.
+A lightweight SGLang implementation built from scratch.
 
 ## Key Features
 
