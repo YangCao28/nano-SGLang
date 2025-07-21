@@ -1,9 +1,7 @@
-# Nano-SGLang
-
-A lightweight SGLang implementation built from scratch.
 
 ## 🚀 BlockManager Highlights
-
+A lightweight SGLang implementation built from scratch.  
+**~1400 lines of concise and clean code.**
 - 🌲 **Trie-based Prefix Sharing**  
   Efficiently reuses KV cache blocks for shared token prefixes across sequences.
 
