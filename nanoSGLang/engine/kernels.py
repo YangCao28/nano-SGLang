@@ -1,5 +1,3 @@
-# kernels.py
-
 import torch
 import triton
 import triton.language as tl
@@ -47,9 +45,6 @@ def copy_kv_prefix_host(
     dst_block: torch.Tensor, 
     num_tokens_to_copy: int
 ):
-    """
-    Python host function to launch the Triton kernel.
-    """
     assert src_block.dim() == 5 and dst_block.dim() == 5
     assert src_block.shape == dst_block.shape
     

@@ -36,7 +36,6 @@ class Block:
 
 class BlockManager:
     def __init__(self, num_blocks: int, block_size: int, kv_cache_shape_per_token, dtype, device):
-        print("\n--- Initializing BlockManager with real PyTorch-based interaction ---")
         self.block_size = block_size
         self.kv_cache_block_shape = (block_size, *kv_cache_shape_per_token)
         self.device = device
@@ -89,18 +88,14 @@ class BlockManager:
         return block
 
     def _evict_least_used_block(self):
-        print("[BlockManager] LRU eviction triggered. Current LRU order:", list(self.lru_cache.keys()))
         found = False
         for block_id in self.lru_cache:
             block = self.blocks[block_id]
-            print(f"  Block {block_id}: ref_count={block.ref_count}, status={block.status}")
             if block.ref_count == 0 and block.status != "SWAPPED_OUT":
-                print(f"  -> Evicting Block {block_id}")
                 self.swap_out(block_id)
                 found = True
                 break
         if not found:
-            print("[BlockManager] ERROR: No evictable block found! All blocks are either in use or already swapped out.")
             raise RuntimeError("No evictable block found")
     def _can_swap_out_for_allocation(self, num_blocks_needed=1) -> bool:
         evictable_blocks = sum(
@@ -116,7 +111,6 @@ class BlockManager:
 
     def swap_out(self, block_id: int):
         block = self.blocks[block_id]
-        print(f"  -> Swapping out Block {block_id}")
         self._copy_gpu_to_cpu(block)
         self._free_gpu_tensor(block)
         block.status = "SWAPPED_OUT"
@@ -126,7 +120,6 @@ class BlockManager:
             node.block_info.status = "SWAPPED_OUT"
 
         if block.ref_count == 0:
-            print(f"  -> Block {block_id} ready for reuse.")
             self.lru_cache.pop(block_id, None)
             self.free_block_ids.append(block_id)
             block.status = "FREE"
@@ -137,10 +130,6 @@ class BlockManager:
             self.lru_cache.move_to_end(block_id)
 
     def allocate(self, seq: Sequence):
-        """
-        为序列分配或复用Block。这是核心的对外接口，封装了所有复杂性。
-        """
-        print(f"\nAllocating for Sequence '{seq.seq_id}' with tokens {seq.token_ids}")
         processed_tokens_len = 0
         
         while processed_tokens_len < len(seq.token_ids):
@@ -166,16 +155,12 @@ class BlockManager:
 
                 if is_pure_prefix:
                     cached_block = self.blocks[cached_block_info.block_id]
-                    print(f"  -> Clean cache hit! Sharing Block {cached_block.block_id} for prefix {cached_block_info.full_token_ids}.")
                     cached_block.ref_count += 1
                     self.touch_block(cached_block.block_id)
                     
                     seq.block_table.append(cached_block.block_id)
                     processed_tokens_len = len(cached_block_info.full_token_ids)
                 else:
-                    # ========================= TRITON KERNEL INTEGRATION =========================
-                    print("  -> Block is contaminated. Triggering CoW with Triton Kernel.")
-                    
                     src_block = self.blocks[cached_block_info.block_id]
                     dst_block = self._allocate_new_block()
                     fork_len = 0
@@ -187,8 +172,6 @@ class BlockManager:
                             break
                     
                     num_tokens_to_copy = fork_len
-
-                    print(f"  -> Calling Triton Kernel to copy {num_tokens_to_copy} tokens from Block {src_block.block_id} to {dst_block.block_id}.")
                     copy_kv_prefix_host(
                         src_block.gpu_tensor,
                         dst_block.gpu_tensor,
@@ -202,15 +185,10 @@ class BlockManager:
                     seq.block_table.append(dst_block.block_id)
                     processed_tokens_len = len(new_block_info.full_token_ids)
             else:
-                print(f"  -> Cache miss. Allocating new block.")
                 new_block = self._allocate_new_block()
                 
                 start_idx = processed_tokens_len
                 end_idx = min(len(seq.token_ids), start_idx + self.block_size)
-                tokens_for_this_block = seq.token_ids[start_idx:end_idx]
-                
-                print(f"  -> Allocated New Block {new_block.block_id} for tokens.")
-                
                 full_prefix_path = seq.token_ids[:end_idx]
                 anchor_node = self.trie.get_or_create_node(full_prefix_path)
                 anchor_node.block_info = BlockInfo(new_block.block_id, full_prefix_path)
@@ -220,31 +198,16 @@ class BlockManager:
                 processed_tokens_len = len(full_prefix_path)
 
     def deallocate(self, seq: Sequence):
-        print(f"\nDeallocating for Sequence '{seq.seq_id}'")
         if not seq.block_table: 
             return
 
         for block_id in seq.block_table:
             block = self.blocks[block_id]
             block.ref_count -= 1
-            print(f"  -> Decremented ref_count for Block {block_id}. New count: {block.ref_count}.")
 
             if block.ref_count == 0:
                 self.swap_out(block_id)
         seq.block_table.clear()
-
-    def print_state(self):
-        print("\n--- Current System State ---")
-        active_blocks = sorted([b for b in self.blocks if b.status != "FREE"], key=lambda b: b.block_id)
-        if not active_blocks:
-            print("All blocks are free.")
-        for block in active_blocks:
-            node = self.block_to_node_map.get(block.block_id)
-            prefix = node.block_info.full_token_ids if node and node.block_info else "N/A"
-            print(f"Block {block.block_id}: Status={block.status}, RefCount={block.ref_count}, Prefix={prefix}")
-        
-        print(f"LRU Order (Oldest -> Newest): {list(self.lru_cache.keys())}")
-        print("--------------------------")
 
     def can_append(self, seq: Sequence) -> bool:
         if seq.status != SequenceStatus.RUNNING:
