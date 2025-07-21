@@ -1,9 +1,10 @@
+import torch
 from collections import deque
-
 from nanovllm.config import Config
 from nanovllm.engine.sequence import Sequence, SequenceStatus
 from nanovllm.engine.block_manager import BlockManager
 
+device = torch.device("cuda", torch.cuda.current_device())
 
 class Scheduler:
 
@@ -11,7 +12,12 @@ class Scheduler:
         self.max_num_seqs = config.max_num_seqs
         self.max_num_batched_tokens = config.max_num_batched_tokens
         self.eos = config.eos
-        self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size)
+        hf_config = config.hf_config
+        num_layers = hf_config.num_hidden_layers
+        num_heads = hf_config.num_attention_heads
+        head_dim = hf_config.hidden_size // num_heads
+        kv_cache_shape_per_token = (num_layers, 2, num_heads, head_dim)
+        self.block_manager = BlockManager(config.num_kvcache_blocks, config.kvcache_block_size, kv_cache_shape_per_token, hf_config.torch_dtype, device)
         self.waiting: deque[Sequence] = deque()
         self.running: deque[Sequence] = deque()
 
