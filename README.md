@@ -55,28 +55,65 @@ outputs[0]["text"]
 ## 🔄 BlockManager Allocation Flow
 
 ```mermaid
-flowchart TD
-    A[Start allocate(seq)] --> B{Trie longest prefix match?}
-    
-    B -->|Yes| C{Cache Block in GPU?}
-    C -->|Yes| D[Check if token is pure prefix]
-    C -->|No| E[swap_in from CPU to GPU] --> D
-    
-    D -->|Yes| F[Share existing Block (ref_count += 1)]
-    D -->|No| G[Copy-on-Write via Triton kernel]
-    G --> H[Allocate New Block]
-    H --> I[Copy shared prefix into new Block]
-    I --> J[Update Trie + block_table]
+sequenceDiagram
+    participant Seq as Sequence
+    participant BM as BlockManager
+    participant GPU as GPU Memory
+    participant CPU as CPU Pinned Memory
+    participant Trie as SharedTrie
 
-    B -->|No| K[Allocate New Block]
-    K --> L[Write new tokens]
-    L --> M[Update Trie + block_table]
+    Seq->>BM: allocate(seq.tokens)
+    BM->>Trie: find longest prefix match
+    alt prefix hit & block in GPU
+        BM->>GPU: increase ref_count
+        BM-->>Seq: share existing block
+    else prefix hit & block swapped out (CPU)
+        BM->>CPU: swap_in block data
+        BM->>GPU: allocate GPU tensor
+        BM->>GPU: copy data CPU->GPU
+        BM-->>Seq: share block
+    else cache miss
+        BM->>GPU: allocate new block tensor
+        BM->>Trie: create new node with prefix
+        BM-->>Seq: new block assigned
+    end
 
-    F --> N[Append to seq.block_table]
-    J --> N
-    M --> N
-    N --> O[processed_tokens_len += x]
-    O --> P{Finished all tokens?}
-    P -->|No| B
-    P -->|Yes| Q[Done ✅]
+    Seq->>BM: deallocate()
+    BM->>GPU: decrease ref_count
+    alt ref_count == 0
+        BM->>GPU: copy block GPU->CPU (swap_out)
+        BM->>GPU: free GPU tensor
+        BM->>Trie: update block status to SWAPPED_OUT
+        BM->>BM: add block_id to free list
+    else ref_count > 0
+        BM-->>Seq: block still in use
+    end
+
+    Note over BM: Periodic LRU eviction triggers
+    BM->>BM: select block with ref_count=0 and status IN_GPU
+    BM->>GPU: swap_out selected block
+    BM->>CPU: copy data GPU->CPU
+    BM->>GPU: free GPU tensor
+    BM->>BM: mark block as FREE and add to free list
+```
+```mermaid
+graph TD
+    BM[BlockManager]
+
+    BM -->|allocate / free block tensors| GPU[GPU Memory Blocks]
+    BM -->|allocate / free pinned tensors| CPU[CPU Pinned Memory Blocks]
+    BM -->|query / update prefix info| Trie[SharedTrie Prefix Tree]
+
+    GPU -- Copy data --> CPU
+    CPU -- Copy data --> GPU
+
+    classDef gpu fill:#a2d2ff,stroke:#000,stroke-width:1px
+    classDef cpu fill:#ffafcc,stroke:#000,stroke-width:1px
+    classDef trie fill:#cdb4db,stroke:#000,stroke-width:1px
+    classDef bm fill:#ffd6a5,stroke:#000,stroke-width:2px,font-weight:bold
+
+    class BM bm
+    class GPU gpu
+    class CPU cpu
+    class Trie trie
 ```
