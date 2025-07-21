@@ -1,8 +1,8 @@
 import torch
 from collections import deque
-from nanovllm.config import Config
-from nanovllm.engine.sequence import Sequence, SequenceStatus
-from nanovllm.engine.block_manager import BlockManager
+from nanoSGLang.config import Config
+from nanoSGLang.engine.sequence import Sequence, SequenceStatus
+from nanoSGLang.engine.block_manager import BlockManager
 
 device = torch.device("cuda", torch.cuda.current_device())
 

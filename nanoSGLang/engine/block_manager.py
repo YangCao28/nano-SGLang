@@ -1,9 +1,9 @@
 import torch
 from collections import deque, OrderedDict
 from typing import List, Dict, Optional
-from nanovllm.engine.trie import SharedTrie, TrieNode
-from nanovllm.engine.sequence import Sequence, SequenceStatus
-from nanovllm.engine.kernels import copy_kv_prefix_host
+from nanoSGLang.engine.trie import SharedTrie, TrieNode
+from nanoSGLang.engine.sequence import Sequence, SequenceStatus
+from nanoSGLang.engine.kernels import copy_kv_prefix_host
 
 class BlockInfo:
     def __init__(self, block_id: int, full_token_ids: List[int]):
@@ -50,28 +50,22 @@ class BlockManager:
 
     # --- 硬件交互层 (Hardware Interaction Layer) ---
     def _allocate_gpu_tensor(self, block: Block):
-        print(f"    [HW] Allocating GPU tensor for Block {block.block_id} on device {block.device}")
         block.gpu_tensor = torch.empty(block.block_shape, dtype=block.dtype, device=block.device)
 
     def _free_gpu_tensor(self, block: Block):
-        print(f"    [HW] Freeing GPU tensor for Block {block.block_id}")
         block.gpu_tensor = None
 
     def _allocate_cpu_pinned_tensor(self, block: Block):
-        print(f"    [HW] Allocating CPU pinned tensor for Block {block.block_id}")
         block.cpu_tensor = torch.empty(block.block_shape, dtype=block.dtype).pin_memory()
 
     def _free_cpu_tensor(self, block: Block):
-        print(f"    [HW] Freeing CPU tensor for Block {block.block_id}")
         block.cpu_tensor = None
 
     def _copy_gpu_to_cpu(self, block: Block):
-        print(f"    [HW] Copying Block {block.block_id}: GPU VRAM -> CPU RAM")
         if block.gpu_tensor is not None and block.cpu_tensor is not None:
             block.cpu_tensor.copy_(block.gpu_tensor)
 
     def _copy_cpu_to_gpu(self, block: Block):
-        print(f"    [HW] Copying Block {block.block_id}: CPU RAM -> GPU VRAM")
         if block.gpu_tensor is not None and block.cpu_tensor is not None:
             block.gpu_tensor.copy_(block.cpu_tensor)
 

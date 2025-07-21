@@ -1,2 +1,2 @@
-from nanovllm.llm import LLM
-from nanovllm.sampling_params import SamplingParams
+from nanoSGLang .llm import LLM
+from nanoSGLang .sampling_params import SamplingParams
