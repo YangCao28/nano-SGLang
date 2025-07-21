@@ -51,3 +51,32 @@ prompts = ["Hello, Nano-vLLM."]
 outputs = llm.generate(prompts, sampling_params)
 outputs[0]["text"]
 ```
+
+## 🔄 BlockManager Allocation Flow
+
+```mermaid
+flowchart TD
+    A[Start allocate(seq)] --> B{Trie longest prefix match?}
+    
+    B -->|Yes| C{Cache Block in GPU?}
+    C -->|Yes| D[Check if token is pure prefix]
+    C -->|No| E[swap_in from CPU to GPU] --> D
+    
+    D -->|Yes| F[Share existing Block (ref_count += 1)]
+    D -->|No| G[Copy-on-Write via Triton kernel]
+    G --> H[Allocate New Block]
+    H --> I[Copy shared prefix into new Block]
+    I --> J[Update Trie + block_table]
+
+    B -->|No| K[Allocate New Block]
+    K --> L[Write new tokens]
+    L --> M[Update Trie + block_table]
+
+    F --> N[Append to seq.block_table]
+    J --> N
+    M --> N
+    N --> O[processed_tokens_len += x]
+    O --> P{Finished all tokens?}
+    P -->|No| B
+    P -->|Yes| Q[Done ✅]
+```
